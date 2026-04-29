@@ -67,7 +67,7 @@ void alleSweeepen(int von, int bis, int schritt = 10) {
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   delay(500);
   Serial.println("\n=== MG90S – 3 Servo Test ===");
 
