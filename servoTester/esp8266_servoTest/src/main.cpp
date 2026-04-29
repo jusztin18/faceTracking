@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Servo.h>
 // ============================================
-// MG90S Servo Test – voller Bereich
+// MG90S – 3 Servo Test
 // ESP8266 + PlatformIO
 // ============================================
 // platformio.ini:
@@ -12,86 +12,125 @@
 // lib_deps = madhephaestus/ESP8266Servo @ ^1.0.0
 // ============================================
 
-#define SERVO_PIN D4
+#include <Arduino.h>
+#include <Servo.h>
 
-// MG90S Pulsweitenbereich (in Mikrosekunden)
-// Standard:  544µs – 2400µs
-// Erweitert: 400µs – 2600µs  ← mehr Bereich möglich
-#define PULSE_MIN  400    // Endanschlag links  (~0°)
-#define PULSE_MAX  2600   // Endanschlag rechts (~180°+)
-#define DELAY_MS   12     // Geschwindigkeit (kleiner = schneller)
+// --- Pin Konfiguration ---
+#define SERVO1_PIN D1
+#define SERVO2_PIN D2
+#define SERVO3_PIN D6
 
-Servo myServo;
+// --- MG90S Pulsweitenbereich ---
+#define PULSE_MIN  500
+#define PULSE_MAX  2500
+#define PULSE_MID  1500
+#define DELAY_MS   12
 
-// Servo über Pulsweitenbereich fahren
-void sweepMikros(int von, int bis, int schritt = 10) {
+Servo servo[3];
+const int pins[3] = {SERVO1_PIN, SERVO2_PIN, SERVO3_PIN};
+
+// --- Einzelnen Servo sweepen ---
+void sweepServo(int idx, int von, int bis, int schritt = 10) {
   if (von < bis) {
     for (int us = von; us <= bis; us += schritt) {
-      myServo.writeMicroseconds(us);
+      servo[idx].writeMicroseconds(us);
       delay(DELAY_MS);
     }
   } else {
     for (int us = von; us >= bis; us -= schritt) {
-      myServo.writeMicroseconds(us);
+      servo[idx].writeMicroseconds(us);
       delay(DELAY_MS);
     }
   }
 }
 
-void pause(int ms = 800) {
-  delay(ms);
+// --- Alle Servos gleichzeitig auf Position ---
+void alleAufPosition(int us) {
+  for (int i = 0; i < 3; i++) {
+    servo[i].writeMicroseconds(us);
+  }
+}
+
+// --- Alle Servos gleichzeitig sweepen ---
+void alleSweeepen(int von, int bis, int schritt = 10) {
+  if (von < bis) {
+    for (int us = von; us <= bis; us += schritt) {
+      for (int i = 0; i < 3; i++) servo[i].writeMicroseconds(us);
+      delay(DELAY_MS);
+    }
+  } else {
+    for (int us = von; us >= bis; us -= schritt) {
+      for (int i = 0; i < 3; i++) servo[i].writeMicroseconds(us);
+      delay(DELAY_MS);
+    }
+  }
 }
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(500);
-  Serial.println("\n=== MG90S Voller Bereich Test ===");
-  Serial.printf("Pulsbereich: %dµs – %dµs\n", PULSE_MIN, PULSE_MAX);
+  Serial.println("\n=== MG90S – 3 Servo Test ===");
 
-  myServo.attach(SERVO_PIN, PULSE_MIN, PULSE_MAX);
-
-  // Mitte anfahren
-  Serial.println("Startposition: Mitte");
-  myServo.writeMicroseconds(1500);
+  for (int i = 0; i < 3; i++) {
+    servo[i].attach(pins[i], PULSE_MIN, PULSE_MAX);
+    servo[i].writeMicroseconds(PULSE_MID);
+    Serial.printf("Servo %d: Pin D%d – bereit\n", i + 1, i + 1);
+  }
   delay(1000);
 }
 
 void loop() {
-  // --- Test 1: Voller Sweep ---
-  Serial.println("\n[Test 1] Voller Sweep: links → rechts");
-  sweepMikros(PULSE_MIN, PULSE_MAX, 10);
-  pause();
-
-  Serial.println("[Test 1] Voller Sweep: rechts → links");
-  sweepMikros(PULSE_MAX, PULSE_MIN, 10);
-  pause();
-
-  // --- Test 2: Endpositionen anfahren ---
-  Serial.println("\n[Test 2] Endpositionen");
-
-  Serial.println("  → Links-Anschlag");
-  myServo.writeMicroseconds(PULSE_MIN);
-  pause(1000);
-
-  Serial.println("  → Mitte (1500µs)");
-  myServo.writeMicroseconds(1500);
-  pause(1000);
-
-  Serial.println("  → Rechts-Anschlag");
-  myServo.writeMicroseconds(PULSE_MAX);
-  pause(1000);
-
-  // --- Test 3: Schneller Sweep (Geschwindigkeitstest) ---
-  Serial.println("\n[Test 3] Schneller Sweep");
+  // --- Test 1: Nacheinander sweepen ---
+  Serial.println("\n[Test 1] Nacheinander: jeder Servo einzeln");
   for (int i = 0; i < 3; i++) {
-    myServo.writeMicroseconds(PULSE_MIN);
+    Serial.printf("  Servo %d: links → rechts\n", i + 1);
+    sweepServo(i, PULSE_MIN, PULSE_MAX);
     delay(300);
-    myServo.writeMicroseconds(PULSE_MAX);
+    sweepServo(i, PULSE_MAX, PULSE_MIN);
     delay(300);
+    servo[i].writeMicroseconds(PULSE_MID);
+    delay(500);
   }
 
-  // Zurück zur Mitte
-  myServo.writeMicroseconds(1500);
+  // --- Test 2: Alle gleichzeitig sweepen ---
+  Serial.println("\n[Test 2] Alle gleichzeitig: links → rechts → links");
+  alleSweeepen(PULSE_MIN, PULSE_MAX);
+  delay(300);
+  alleSweeepen(PULSE_MAX, PULSE_MIN);
+  delay(500);
+
+  // --- Test 3: Welleneffekt (Versetzt) ---
+  Serial.println("\n[Test 3] Welleneffekt");
+  for (int us = PULSE_MIN; us <= PULSE_MAX; us += 10) {
+    servo[0].writeMicroseconds(us);
+    servo[1].writeMicroseconds(constrain(us - 300, PULSE_MIN, PULSE_MAX));
+    servo[2].writeMicroseconds(constrain(us - 600, PULSE_MIN, PULSE_MAX));
+    delay(DELAY_MS);
+  }
+  for (int us = PULSE_MAX; us >= PULSE_MIN; us -= 10) {
+    servo[0].writeMicroseconds(us);
+    servo[1].writeMicroseconds(constrain(us + 300, PULSE_MIN, PULSE_MAX));
+    servo[2].writeMicroseconds(constrain(us + 600, PULSE_MIN, PULSE_MAX));
+    delay(DELAY_MS);
+  }
+
+  // --- Test 4: Endpositionen ---
+  Serial.println("\n[Test 4] Endpositionen");
+  Serial.println("  → Alle Links");
+  alleAufPosition(PULSE_MIN);
+  delay(800);
+
+  Serial.println("  → Alle Mitte");
+  alleAufPosition(PULSE_MID);
+  delay(800);
+
+  Serial.println("  → Alle Rechts");
+  alleAufPosition(PULSE_MAX);
+  delay(800);
+
+  Serial.println("  → Alle Mitte");
+  alleAufPosition(PULSE_MID);
+
   Serial.println("\nPause 3 Sekunden...");
   delay(3000);
 }
